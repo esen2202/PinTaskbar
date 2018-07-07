@@ -1,7 +1,10 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -90,7 +93,7 @@ namespace PinTaskbar
 
         private void Settings_Load(object sender, EventArgs e)
         {
-            
+
 
             this.ShowInTaskbar = false;
 
@@ -206,14 +209,14 @@ namespace PinTaskbar
 
         private void Settings_FormClosing(object sender, FormClosingEventArgs e)
         {
-           
+
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
             if (cbPinDesktop.Checked == true)
             {
-                if (IsOnDesktop())
+                if (!isThereMaximizeWindow())
                 {
                     SetTaskbarState(AppBarStates.AlwaysOnTop);
                 }
@@ -222,7 +225,7 @@ namespace PinTaskbar
                     SetTaskbarState(AppBarStates.AutoHide);
                 }
             }
-          
+
         }
 
 
@@ -238,6 +241,7 @@ namespace PinTaskbar
             IntPtr cWin = GetForegroundWindow();
             foreach (Process x in proc)
             {
+
                 if (x.MainWindowHandle == cWin)
                 {
                     return false;
@@ -262,12 +266,12 @@ namespace PinTaskbar
         //Startup registry key and value
         private static readonly string StartupKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
         private static readonly string StartupValue = "PinTaskbar";
-    
+
         private static void SetStartup()
         {
             //Set the application to run at startup
-              RegistryKey key = Registry.CurrentUser.OpenSubKey(StartupKey, true);
-              key.SetValue(StartupValue, Application.ExecutablePath.ToString());
+            RegistryKey key = Registry.CurrentUser.OpenSubKey(StartupKey, true);
+            key.SetValue(StartupValue, Application.ExecutablePath.ToString());
         }
 
         private static void DeleteStartup()
@@ -290,10 +294,101 @@ namespace PinTaskbar
 
         private void button1_Click(object sender, EventArgs e)
         {
-            Application.Exit();
+            this.WindowState = FormWindowState.Minimized;
         }
 
-       
-    }
 
+        // Tüm Açık Window ların Status una erişmek
+        #region minimized all window 
+
+        private static WINDOWPLACEMENT GetPlacement(IntPtr hwnd)
+        {
+            WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
+            placement.length = Marshal.SizeOf(placement);
+            GetWindowPlacement(hwnd, ref placement);
+            return placement;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        [Serializable]
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WINDOWPLACEMENT
+        {
+            public int length;
+            public int flags;
+            public ShowWindowCommands showCmd;
+            public System.Drawing.Point ptMinPosition;
+            public System.Drawing.Point ptMaxPosition;
+            public System.Drawing.Rectangle rcNormalPosition;
+        }
+
+        internal enum ShowWindowCommands : int
+        {
+            Hide = 0,
+            Normal = 1,
+            Minimized = 2,
+            Maximized = 3,
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            //  listBox1.Items.Clear();
+            Process[] procs = Process.GetProcesses();
+            List<string> islemler = new List<string>();
+
+            foreach (Process proc in procs)
+            {
+                var placement = GetPlacement(proc.MainWindowHandle);
+                if (placement.showCmd != ShowWindowCommands.Hide)
+                {
+                    islemler.Add(placement.showCmd.ToString() + " | " + proc.ProcessName); //proc.MainWindowTitle
+                }
+            }
+
+            islemler.Sort();
+            listBox1.DataSource = islemler;
+        }
+
+        bool isThereMaximizeWindow()
+        {
+            bool result = false;
+
+            Process[] procs = Process.GetProcesses();
+            foreach (Process proc in procs)
+            {
+                var placement = GetPlacement(proc.MainWindowHandle);
+                if (placement.showCmd == ShowWindowCommands.Maximized)
+                {
+                    result = true;
+                }
+            }
+
+            #region Explorer için Max Kontrolü
+            SHDocVw.ShellWindows shellWindows = new SHDocVw.ShellWindows();
+
+            string filename;
+            ArrayList windows = new ArrayList();
+
+            foreach (SHDocVw.InternetExplorer ie in shellWindows)
+            {
+                filename = Path.GetFileNameWithoutExtension(ie.FullName).ToLower();
+                if (filename.Equals("explorer"))
+                {
+                    //do something with the handle here
+                    MessageBox.Show(ie.HWND.ToString());
+                    
+                }
+            }
+
+            #endregion
+            return result;
+
+        }
+        #endregion
+
+
+    }
 }
